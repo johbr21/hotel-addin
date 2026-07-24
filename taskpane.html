@@ -82,7 +82,6 @@
         });
 
         setStatus("Loaded " + Object.keys(hotelFiles).length + " hotel file(s).");
-        buildKeywordIndex();
       } catch (err) {
         setStatus("Error loading hotel list: " + err.message);
       }
@@ -95,38 +94,15 @@
       "2024", "2025", "2026", "spa", "collection"
     ]);
 
-    // Strips accents (é -> e, ô -> o, etc.) and lowercases, so "Honoré" matches "honore".
-    function normalize(str) {
-      return str
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .toLowerCase();
-    }
-
-    // Breaks a hotel name into meaningful keywords (ignoring stopwords and very short words).
+    // Breaks a hotel filename into meaningful keywords (ignoring stopwords and short words).
     function getKeywords(name) {
-      return normalize(name)
+      return name
         .split(/[^a-z0-9]+/i)
+        .map(w => w.toLowerCase())
         .filter(w => w.length >= 3 && !STOPWORDS.has(w));
     }
 
-    // For every keyword, tracks how many different hotels use it.
-    // A keyword used by only one hotel is "distinctive" and can match on its own.
-    // A keyword shared by several hotels (e.g. a city name) needs a second matching
-    // keyword alongside it before we suggest that hotel.
-    let keywordHotelCount = {};
-
-    function buildKeywordIndex() {
-      keywordHotelCount = {};
-      for (const hotelName in hotelFiles) {
-        const keywords = new Set(getKeywords(hotelName));
-        keywords.forEach(kw => {
-          keywordHotelCount[kw] = (keywordHotelCount[kw] || 0) + 1;
-        });
-      }
-    }
-
-    // Reads the current email body text and looks for hotels with a strong-enough keyword match.
+    // Reads the current email body text and looks for any hotel keyword match.
     function checkForHotel() {
       const resultDiv = document.getElementById("result");
       resultDiv.innerHTML = "";
@@ -138,21 +114,20 @@
           return;
         }
 
-        const bodyText = normalize(result.value);
+        const bodyText = result.value.toLowerCase();
         let matchCount = 0;
+        const shown = new Set();
 
         for (const hotelName in hotelFiles) {
           const keywords = getKeywords(hotelName);
-          const matched = keywords.filter(kw => new RegExp("\\b" + kw + "\\b", "i").test(bodyText));
-          const distinctiveMatch = matched.some(kw => keywordHotelCount[kw] === 1);
+          const matchedKeyword = keywords.find(kw => new RegExp("\\b" + kw + "\\b", "i").test(bodyText));
 
-          // Suggest this hotel if at least one matched keyword is unique to it,
-          // OR if two or more of its keywords all showed up together.
-          if (distinctiveMatch || matched.length >= 2) {
+          if (matchedKeyword && !shown.has(hotelName)) {
+            shown.add(hotelName);
             matchCount++;
             const btn = document.createElement("button");
             btn.textContent = "Attach: " + hotelName + ".pdf";
-            btn.title = "Matched on: " + matched.join(", ");
+            btn.title = "Matched on: " + matchedKeyword;
             btn.onclick = () => attachHotelFile(hotelName, hotelFiles[hotelName]);
             resultDiv.appendChild(btn);
           }
