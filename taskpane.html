@@ -87,22 +87,7 @@
       }
     }
 
-    // Common filler words to ignore when breaking a filename into matchable keywords.
-    const STOPWORDS = new Set([
-      "hotel", "hotels", "resort", "resorts", "factsheet", "fact", "sheet",
-      "the", "and", "de", "la", "le", "el", "presentation", "final", "v1", "v2",
-      "2024", "2025", "2026", "spa", "collection"
-    ]);
-
-    // Breaks a hotel filename into meaningful keywords (ignoring stopwords and short words).
-    function getKeywords(name) {
-      return name
-        .split(/[^a-z0-9]+/i)
-        .map(w => w.toLowerCase())
-        .filter(w => w.length >= 3 && !STOPWORDS.has(w));
-    }
-
-    // Reads the current email body text and looks for any hotel keyword match.
+    // Reads the current email body text and looks for any hotel name match.
     function checkForHotel() {
       const resultDiv = document.getElementById("result");
       resultDiv.innerHTML = "";
@@ -116,18 +101,12 @@
 
         const bodyText = result.value.toLowerCase();
         let matchCount = 0;
-        const shown = new Set();
 
         for (const hotelName in hotelFiles) {
-          const keywords = getKeywords(hotelName);
-          const matchedKeyword = keywords.find(kw => new RegExp("\\b" + kw + "\\b", "i").test(bodyText));
-
-          if (matchedKeyword && !shown.has(hotelName)) {
-            shown.add(hotelName);
+          if (bodyText.includes(hotelName)) {
             matchCount++;
             const btn = document.createElement("button");
             btn.textContent = "Attach: " + hotelName + ".pdf";
-            btn.title = "Matched on: " + matchedKeyword;
             btn.onclick = () => attachHotelFile(hotelName, hotelFiles[hotelName]);
             resultDiv.appendChild(btn);
           }
