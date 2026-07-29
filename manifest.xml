@@ -12,17 +12,16 @@
   <ProviderName>Jonathan Haghebaert</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
 
-  <DisplayName DefaultValue="Hotel Factsheet Attacher" />
+  <DisplayName DefaultValue="IHG Sales Companion" />
   <Description DefaultValue="Checks your email text for a matching hotel name and offers to attach the matching factsheet PDF." />
 
   <IconUrl DefaultValue="https://johbr21.github.io/hotel-addin/icon-32.png" />
-  <HighResIconUrl DefaultValue="https://johbr21.github.io/hotel-addin/icon-80.png" />
+  <HighResolutionIconUrl DefaultValue="https://johbr21.github.io/hotel-addin/icon-80.png" />
 
   <SupportUrl DefaultValue="https://ihg.sharepoint.com/sites/Globalluxuryandleisuresalesteam" />
 
   <AppDomains>
     <AppDomain>https://ihg.sharepoint.com</AppDomain>
-    <AppDomain>https://johbr21.github.io</AppDomain>
   </AppDomains>
 
   <Hosts>
@@ -53,7 +52,7 @@
 
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides" xsi:type="VersionOverridesV1_0">
     <Requirements>
-      <bt:Sets DefaultMinVersion="1.3">
+      <bt:Sets DefaultMinVersion="1.5">
         <bt:Set Name="Mailbox" />
       </bt:Sets>
     </Requirements>
@@ -97,8 +96,8 @@
         <bt:Url id="Taskpane.Url" DefaultValue="https://johbr21.github.io/hotel-addin/taskpane.html" />
       </bt:Urls>
       <bt:ShortStrings>
-        <bt:String id="GroupLabel" DefaultValue="Hotel Attach" />
-        <bt:String id="TaskpaneButton.Label" DefaultValue="Hotel PDF" />
+        <bt:String id="GroupLabel" DefaultValue="IHG Sales Companion" />
+        <bt:String id="TaskpaneButton.Label" DefaultValue="Sales Companion" />
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Check message for a hotel name and attach the matching factsheet" />
