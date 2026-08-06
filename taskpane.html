@@ -42,11 +42,20 @@
     // ====== YOUR GITHUB REPO DETAILS ======
     const GH_OWNER = "johbr21";
     const GH_REPO = "hotel-addin";
-    const GH_FOLDER = ""; // empty = root of the branch
     const GH_BRANCH = "Factsheets";
     // ================================================================
+    // Expected structure in this branch:
+    //   Factsheets/                     <- root of this branch
+    //     InterContinental Paris/        <- one folder per hotel (this name is what gets matched)
+    //       factsheet.pdf
+    //       brochure.pdf
+    //       photo1.jpg
+    //     Kimpton Paris St Honore/
+    //       factsheet.pdf
+    //       photo1.jpg
+    // ================================================================
 
-    let hotelFiles = {}; // populated on load: { "hotel name": "raw download url" }
+    let hotelEntries = {}; // { "exact name (lowercase)": { type: "dir"|"file", path, download_url, name } }
 
     Office.onReady(() => {
       document.getElementById("checkBtn").onclick = checkForHotel;
@@ -57,75 +66,154 @@
       document.getElementById("status").textContent = msg;
     }
 
-    // Pulls the list of PDF filenames from your GitHub repo's factsheets folder.
-    // GitHub's API allows cross-origin requests, so this works from GitHub Pages directly.
+    // Lists everything at the root of the branch — both hotel folders and standalone files.
     async function loadHotelList() {
       setStatus("Loading hotel list...");
       try {
-        const apiUrl = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_FOLDER}?ref=${GH_BRANCH}`.replace("contents/?", "contents?");
+        const apiUrl = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents?ref=${GH_BRANCH}`;
         const response = await fetch(apiUrl, {
           headers: { "Accept": "application/vnd.github+json" }
         });
 
         if (!response.ok) {
-          setStatus("Could not load library (status " + response.status + "). Check GH_OWNER/GH_REPO/GH_FOLDER.");
+          setStatus("Could not load library (status " + response.status + "). Check GH_OWNER/GH_REPO/GH_BRANCH.");
           return;
         }
 
         const data = await response.json();
-        hotelFiles = {};
-        data.forEach(file => {
-          if (file.name.toLowerCase().endsWith(".pdf")) {
-            const name = file.name.replace(/\.pdf$/i, "").toLowerCase().trim();
-            hotelFiles[name] = file.download_url; // raw.githubusercontent.com direct link
+        hotelEntries = {};
+        data.forEach(item => {
+          if (item.type === "dir") {
+            const key = item.name.toLowerCase().trim();
+            hotelEntries[key] = { type: "dir", path: item.path, name: item.name };
+          } else if (item.type === "file") {
+            // Match key is the filename without its extension, e.g. "Kimpton Paris.pdf" -> "kimpton paris"
+            const key = item.name.replace(/\.[^.]+$/, "").toLowerCase().trim();
+            hotelEntries[key] = { type: "file", download_url: item.download_url, name: item.name };
           }
         });
 
-        setStatus("Loaded " + Object.keys(hotelFiles).length + " hotel file(s).");
+        setStatus("Loaded " + Object.keys(hotelEntries).length + " hotel entrie(s).");
       } catch (err) {
         setStatus("Error loading hotel list: " + err.message);
       }
     }
 
-    // Reads the current email body text and looks for any hotel name match.
+    // Reads the current email body text and looks for an exact hotel name match
+    // (works whether that hotel is a folder or a standalone file).
     function checkForHotel() {
       const resultDiv = document.getElementById("result");
       resultDiv.innerHTML = "";
       setStatus("Checking message...");
 
-      Office.context.mailbox.item.body.getAsync("text", (result) => {
+      Office.context.mailbox.item.body.getAsync("text", async (result) => {
         if (result.status !== Office.AsyncResultStatus.Succeeded) {
           setStatus("Could not read the message body.");
           return;
         }
 
         const bodyText = result.value.toLowerCase();
-        let matchCount = 0;
+        const matchedNames = Object.keys(hotelEntries).filter(name => bodyText.includes(name));
 
-        for (const hotelName in hotelFiles) {
-          if (bodyText.includes(hotelName)) {
-            matchCount++;
-            const btn = document.createElement("button");
-            btn.textContent = "Attach: " + hotelName + ".pdf";
-            btn.onclick = () => attachHotelFile(hotelName, hotelFiles[hotelName]);
-            resultDiv.appendChild(btn);
+        if (matchedNames.length === 0) {
+          setStatus("No matching hotel name found in the message.");
+          return;
+        }
+
+        setStatus("Found " + matchedNames.length + " match(es). Loading files...");
+
+        for (const key of matchedNames) {
+          const entry = hotelEntries[key];
+          if (entry.type === "dir") {
+            await showFilesForHotel(key, entry.path);
+          } else {
+            showSingleFile(key, entry.name, entry.download_url);
           }
         }
 
-        setStatus(matchCount > 0
-          ? "Found " + matchCount + " match(es)."
-          : "No matching hotel name found in the message.");
+        setStatus("Ready — pick a file to attach.");
       });
     }
 
-    // Fetches the PDF straight from GitHub's raw content CDN and attaches it.
-    async function attachHotelFile(hotelName, downloadUrl) {
-      setStatus("Fetching " + hotelName + ".pdf...");
+    // Renders a single attach button for a standalone-file hotel entry (no folder needed).
+    function showSingleFile(hotelKey, fileName, downloadUrl) {
+      const resultDiv = document.getElementById("result");
+
+      const header = document.createElement("div");
+      header.style.marginTop = "10px";
+      header.style.fontWeight = "bold";
+      header.textContent = hotelKey;
+      resultDiv.appendChild(header);
+
+      const btn = document.createElement("button");
+      btn.textContent = "Attach: " + fileName;
+      btn.onclick = () => attachFile(fileName, downloadUrl);
+      resultDiv.appendChild(btn);
+    }
+
+    // Fetches the list of files inside a matched hotel's folder and renders a button per file,
+    // plus one "Attach all" button for convenience.
+    async function showFilesForHotel(hotelName, folderPath) {
+      const resultDiv = document.getElementById("result");
+
+      const header = document.createElement("div");
+      header.style.marginTop = "10px";
+      header.style.fontWeight = "bold";
+      header.textContent = hotelName;
+      resultDiv.appendChild(header);
+
+      try {
+        const apiUrl = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${encodeURIComponent(folderPath)}?ref=${GH_BRANCH}`;
+        const response = await fetch(apiUrl, {
+          headers: { "Accept": "application/vnd.github+json" }
+        });
+
+        if (!response.ok) {
+          const errMsg = document.createElement("div");
+          errMsg.textContent = "Could not load files for " + hotelName + " (status " + response.status + ").";
+          resultDiv.appendChild(errMsg);
+          return;
+        }
+
+        const files = (await response.json()).filter(f => f.type === "file");
+
+        if (files.length === 0) {
+          const noFiles = document.createElement("div");
+          noFiles.textContent = "No files found in this hotel's folder.";
+          resultDiv.appendChild(noFiles);
+          return;
+        }
+
+        // "Attach all" button
+        if (files.length > 1) {
+          const allBtn = document.createElement("button");
+          allBtn.textContent = "Attach all (" + files.length + " files)";
+          allBtn.onclick = () => files.forEach(f => attachFile(f.name, f.download_url));
+          resultDiv.appendChild(allBtn);
+        }
+
+        // One button per individual file
+        files.forEach(file => {
+          const btn = document.createElement("button");
+          btn.textContent = "Attach: " + file.name;
+          btn.onclick = () => attachFile(file.name, file.download_url);
+          resultDiv.appendChild(btn);
+        });
+      } catch (err) {
+        const errMsg = document.createElement("div");
+        errMsg.textContent = "Error loading files for " + hotelName + ": " + err.message;
+        resultDiv.appendChild(errMsg);
+      }
+    }
+
+    // Fetches a file straight from GitHub's raw content CDN and attaches it to the email.
+    async function attachFile(fileName, downloadUrl) {
+      setStatus("Fetching " + fileName + "...");
       try {
         const response = await fetch(downloadUrl);
 
         if (!response.ok) {
-          setStatus("Could not download the file (status " + response.status + ").");
+          setStatus("Could not download " + fileName + " (status " + response.status + ").");
           return;
         }
 
@@ -134,18 +222,18 @@
 
         Office.context.mailbox.item.addFileAttachmentFromBase64Async(
           base64,
-          hotelName + ".pdf",
+          fileName,
           { isInline: false },
           (asyncResult) => {
             if (asyncResult.status === Office.AsyncResultStatus.Succeeded) {
-              setStatus("Attached " + hotelName + ".pdf successfully.");
+              setStatus("Attached " + fileName + " successfully.");
             } else {
               setStatus("Attach failed: " + asyncResult.error.message);
             }
           }
         );
       } catch (err) {
-        setStatus("Error attaching file: " + err.message);
+        setStatus("Error attaching " + fileName + ": " + err.message);
       }
     }
 
